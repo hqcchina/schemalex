@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/deckarep/golang-set"
+	mapset "github.com/deckarep/golang-set"
 	"github.com/schemalex/schemalex"
 	"github.com/schemalex/schemalex/format"
 	"github.com/schemalex/schemalex/internal/errors"
@@ -66,27 +66,42 @@ func Statements(dst io.Writer, from, to model.Stmts, options ...Option) error {
 
 	var buf bytes.Buffer
 	if txn {
-		buf.WriteString("\nBEGIN;\n\nSET FOREIGN_KEY_CHECKS = 0;")
+		buf.WriteString("BEGIN;\n\nSET FOREIGN_KEY_CHECKS = 0;")
 	}
 
+	blank := true
 	for _, p := range procs {
 		var pbuf bytes.Buffer
 		n, err := p(ctx, &pbuf)
 		if err != nil {
 			return errors.Wrap(err, `failed to produce diff`)
 		}
+
+		if pbuf.Len() == 0 {
+			continue
+		}
+
+		blank = false
+
 		if txn && n > 0 || !txn && buf.Len() > 0 && n > 0 {
 			buf.WriteString("\n\n")
 		}
+
 		pbuf.WriteTo(&buf)
 	}
+
 	if txn {
 		buf.WriteString("\n\nSET FOREIGN_KEY_CHECKS = 1;\n\nCOMMIT;")
+	}
+
+	if blank {
+		buf.Reset()
 	}
 
 	if _, err := buf.WriteTo(dst); err != nil {
 		return errors.Wrap(err, `failed to write diff`)
 	}
+
 	return nil
 }
 
@@ -125,7 +140,7 @@ func Files(dst io.Writer, from, to string, options ...Option) error {
 	return Sources(dst, schemalex.NewLocalFileSource(from), schemalex.NewLocalFileSource(to), options...)
 }
 
-// Files compares contents from two sources and generates a series
+// Sources compares contents from two sources and generates a series
 // of statements to migrate from the old one to the new one,
 // writing the result to `dst`
 func Sources(dst io.Writer, from, to schemalex.SchemaSource, options ...Option) error {
