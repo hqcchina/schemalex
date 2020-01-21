@@ -247,11 +247,13 @@ func newAlterCtx(from, to model.Table) *alterCtx {
 
 func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 	procs := []func(*alterCtx, io.Writer) (int64, error){
+		alterTableOptions,
 		dropTableIndexes,
 		dropTableColumns,
 		addTableColumns,
 		alterTableColumns,
 		addTableIndexes,
+		alterTablePrimary,
 	}
 
 	ids := ctx.toSet.Intersect(ctx.fromSet)
@@ -430,6 +432,38 @@ func alterTableColumns(ctx *alterCtx, dst io.Writer) (int64, error) {
 			return 0, errors.Errorf(`column %s not found in new schema`, columnName)
 		}
 
+		// if (beforeColumnStmt.HasCharacterSet() || ctx.from.HasCharacterSet()) && (ctx.to.HasCharacterSet() || afterColumnStmt.HasCharacterSet()) {
+		// 	beforeColumnCharset := ctx.from.CharacterSet()
+		// 	if beforeColumnStmt.HasCharacterSet() {
+		// 		beforeColumnCharset = beforeColumnStmt.CharacterSet()
+		// 	}
+
+		// 	afterColumnCharset := ctx.to.CharacterSet()
+		// 	if afterColumnStmt.HasCharacterSet() {
+		// 		afterColumnCharset = afterColumnStmt.CharacterSet()
+		// 	}
+
+		// 	if beforeColumnCharset != afterColumnCharset {
+		// 		afterColumnStmt.SetCharacterSet(afterColumnCharset)
+		// 	}
+		// }
+
+		if (beforeColumnStmt.HasCollation() || ctx.to.HasCollation()) && (ctx.to.HasCollation() || afterColumnStmt.HasCollation()) {
+			beforeColumnCollation := ctx.from.Collation()
+			if beforeColumnStmt.HasCollation() {
+				beforeColumnCollation = beforeColumnStmt.Collation()
+			}
+
+			afterColumnCollation := ctx.to.Collation()
+			if afterColumnStmt.HasCollation() {
+				afterColumnCollation = afterColumnStmt.Collation()
+			}
+
+			if beforeColumnCollation != afterColumnCollation || beforeColumnStmt.HasCollation() {
+				afterColumnStmt.SetCollation(afterColumnCollation)
+			}
+		}
+
 		if reflect.DeepEqual(beforeColumnStmt, afterColumnStmt) {
 			continue
 		}
@@ -464,12 +498,6 @@ func dropTableIndexes(ctx *alterCtx, dst io.Writer) (int64, error) {
 		}
 
 		if indexStmt.IsPrimaryKey() {
-			if buf.Len() > 0 {
-				buf.WriteByte('\n')
-			}
-			buf.WriteString("ALTER TABLE `")
-			buf.WriteString(ctx.from.Name())
-			buf.WriteString("` DROP PRIMARY KEY;")
 			continue
 		}
 
@@ -525,10 +553,16 @@ func addTableIndexes(ctx *alterCtx, dst io.Writer) (int64, error) {
 		if !ok {
 			return 0, errors.Errorf(`index '%s' not found in old schema (add index)`, index)
 		}
+
+		if indexStmt.IsPrimaryKey() {
+			continue
+		}
+
 		if indexStmt.IsForeignKey() {
 			lazy = append(lazy, indexStmt)
 			continue
 		}
+
 		if buf.Len() > 0 {
 			buf.WriteByte('\n')
 		}
@@ -549,6 +583,89 @@ func addTableIndexes(ctx *alterCtx, dst io.Writer) (int64, error) {
 		buf.WriteString(ctx.from.Name())
 		buf.WriteString("` ADD ")
 		if err := format.SQL(&buf, indexStmt); err != nil {
+			return 0, err
+		}
+		buf.WriteByte(';')
+	}
+
+	return buf.WriteTo(dst)
+}
+
+func alterTablePrimary(ctx *alterCtx, dst io.Writer) (int64, error) {
+	var buf bytes.Buffer
+
+	found := false
+	indexes := ctx.fromIndexes.Difference(ctx.toIndexes)
+	for _, index := range indexes.ToSlice() {
+		indexStmt, ok := ctx.from.LookupIndex(index.(string))
+		if !ok {
+			return 0, errors.Errorf(`index '%s' not found in old schema (drop index)`, index)
+		}
+
+		if indexStmt.IsPrimaryKey() {
+			found = true
+			break
+		}
+	}
+
+	indexes = ctx.toIndexes.Difference(ctx.fromIndexes)
+	for _, index := range indexes.ToSlice() {
+		indexStmt, ok := ctx.to.LookupIndex(index.(string))
+		if !ok {
+			return 0, errors.Errorf(`index '%s' not found in old schema (add index)`, index)
+		}
+
+		if indexStmt.IsPrimaryKey() {
+			if buf.Len() > 0 {
+				buf.WriteByte('\n')
+			}
+			buf.WriteString("ALTER TABLE `")
+			buf.WriteString(ctx.from.Name())
+			if found {
+				buf.WriteString("` DROP PRIMARY KEY, ADD ")
+				found = false
+			} else {
+				buf.WriteString("` ADD ")
+			}
+
+			if err := format.SQL(&buf, indexStmt); err != nil {
+				return 0, err
+			}
+			buf.WriteByte(';')
+
+			break
+		}
+	}
+
+	if found {
+		if buf.Len() > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString("ALTER TABLE `")
+		buf.WriteString(ctx.from.Name())
+		buf.WriteString("` DROP PRIMARY KEY;")
+	}
+
+	return buf.WriteTo(dst)
+}
+
+func alterTableOptions(ctx *alterCtx, dst io.Writer) (int64, error) {
+	var buf bytes.Buffer
+	for afterOptStmt := range ctx.to.Options() {
+		beforeOptStmt, ok := ctx.from.LookupOption(afterOptStmt.ID())
+		if ok {
+			if reflect.DeepEqual(beforeOptStmt, afterOptStmt) {
+				continue
+			}
+		}
+
+		if buf.Len() > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString("ALTER TABLE `")
+		buf.WriteString(ctx.from.Name())
+		buf.WriteString("` ")
+		if err := format.SQL(&buf, afterOptStmt); err != nil {
 			return 0, err
 		}
 		buf.WriteByte(';')

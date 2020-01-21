@@ -12,6 +12,16 @@ func (t *table) ID() string {
 	return "table#" + t.name
 }
 
+func (t *table) LookupOption(id string) (TableOption, bool) {
+	for opt := range t.Options() {
+		if opt.ID() == id {
+			return opt, true
+		}
+	}
+
+	return nil, false
+}
+
 func (t *table) lookupColumnOrderNoLock(id string) (int, bool) {
 	idx, ok := t.columnNameToIndex[id]
 	return idx, ok
@@ -78,12 +88,50 @@ func (t *table) AddIndex(v Index) Table {
 }
 
 func (t *table) AddOption(v TableOption) Table {
+	switch v.Key() {
+	case "DEFAULT CHARACTER SET":
+		t.SetCharacterSet(v.Value())
+	case "DEFAULT COLLATE":
+		t.SetCollation(v.Value())
+	default:
+
+	}
+
 	t.options = append(t.options, v)
+
 	return t
 }
 
 func (t *table) Name() string {
 	return t.name
+}
+
+func (t *table) SetCharacterSet(s string) Table {
+	t.charset.Valid = true
+	t.charset.Value = s
+	return t
+}
+
+func (t *table) SetCollation(s string) Table {
+	t.collation.Valid = true
+	t.collation.Value = s
+	return t
+}
+
+func (t *table) CharacterSet() string {
+	return t.charset.Value
+}
+
+func (t *table) Collation() string {
+	return t.collation.Value
+}
+
+func (t *table) HasCharacterSet() bool {
+	return t.charset.Valid
+}
+
+func (t *table) HasCollation() bool {
+	return t.collation.Valid
 }
 
 func (t *table) IsIfNotExists() bool {

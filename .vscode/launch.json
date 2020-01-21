@@ -1,0 +1,19 @@
+{
+    // 使用 IntelliSense 了解相关属性。
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "schemalex",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceRoot}/cmd/schemalex",
+            "env": {},
+            "args": ["mysql://root:root@tcp(127.0.0.1:3306)/mx01log?collation=utf8mb4_unicode_ci&charset=utf8mb4","..\\..\\..\\..\\..\\..\\MX01\\trunk\\server\\Config\\DB\\mx01log.sql"]
+            // "args": ["mysql://root:root@tcp(127.0.0.1:3306)/mx01?charset=utf8mb4&collation=utf8mb4_unicode_ci","..\\..\\..\\..\\..\\..\\MX01\\trunk\\server\\Config\\DB\\mx01.sql"]
+            // "args": ["mysql://root:root@tcp(127.0.0.1:3306)/mx01?charset=utf8mb4&collation=utf8mb4_unicode_ci","..\\..\\..\\..\\..\\..\\MX01\\trunk\\server\\Config\\DB\\mx01.sql"]
+        }
+    ]
+}

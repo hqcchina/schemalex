@@ -95,21 +95,21 @@ Examples:
 
 Below is the equivalent of the previous SYNOPSIS.
 
-```
+```golang
 package schemalex_test
 
 import (
-	"os"
+    "os"
 
-	"github.com/schemalex/schemalex/diff"
+    "github.com/schemalex/schemalex/diff"
 )
 
 func Example() {
-	const sql1 = `CREATE TABLE hoge (
+    const sql1 = `CREATE TABLE hoge (
     id INTEGER NOT NULL AUTO_INCREMENT,
     PRIMARY KEY (id)
 );`
-	const sql2 = `CREATE TABLE hoge (
+    const sql2 = `CREATE TABLE hoge (
     id INTEGER NOT NULL AUTO_INCREMENT,
     c VARCHAR (20) NOT NULL DEFAULT "hoge",
     PRIMARY KEY (id)

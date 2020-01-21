@@ -1,6 +1,10 @@
 Changes
 =======
 
+v0.1.2 - 2020.01.21
+    * 修正字符集变更语句生成失败
+    * 修正删除自增主键时报错
+
 v0.1.1 - 21 Nov 2019
     * Add double quote in docs  (#81)
     * fix parse error mysql://user:@protocol(host:port)/dbname case at go 1.12.8 (#82)

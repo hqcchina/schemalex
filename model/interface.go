@@ -186,6 +186,13 @@ type Table interface {
 	IsIfNotExists() bool
 	SetIfNotExists(bool) Table
 
+	HasCharacterSet() bool
+	CharacterSet() string
+	SetCharacterSet(string) Table
+	HasCollation() bool
+	Collation() string
+	SetCollation(string) Table
+
 	HasLikeTable() bool
 	LikeTable() string
 	SetLikeTable(string) Table
@@ -205,6 +212,8 @@ type Table interface {
 	LookupColumnBefore(string) (TableColumn, bool)
 
 	LookupIndex(string) (Index, bool)
+
+	LookupOption(string) (TableOption, bool)
 
 	// Normalize returns normalized table. If a normalization was performed
 	// and the table is modified, returns a new instance of the Table object
@@ -227,6 +236,8 @@ type table struct {
 	name              string
 	temporary         bool
 	ifnotexists       bool
+	charset           maybeString
+	collation         maybeString
 	likeTable         maybeString
 	columns           []TableColumn
 	columnNameToIndex map[string]int

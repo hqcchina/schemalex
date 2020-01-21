@@ -28,6 +28,12 @@ func TestDiff(t *testing.T) {
 			After:  "CREATE TABLE `hoge` ( `id` INTEGER NOT NULL ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COMMENT 'table comment'; CREATE TABLE `fuga` ( `id` INTEGER NOT NULL );",
 			Expect: "CREATE TABLE `hoge` (\n`id` INT (11) NOT NULL\n) ENGINE = InnoDB, DEFAULT CHARACTER SET = utf8mb4, COMMENT = 'table comment';",
 		},
+		// change table option
+		{
+			Before: "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL );",
+			After:  "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COMMENT 'table comment';",
+			Expect: "ALTER TABLE `fuga` ENGINE = InnoDB;\nALTER TABLE `fuga` DEFAULT CHARACTER SET = utf8mb4;\nALTER TABLE `fuga` COMMENT = 'table comment';",
+		},
 		// drop column
 		{
 			Before: "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL, `c` VARCHAR (20) NOT NULL DEFAULT 'xxx' );",
@@ -74,6 +80,12 @@ func TestDiff(t *testing.T) {
 			Before: "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL AUTO_INCREMENT );",
 			After:  "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`) );",
 			Expect: "ALTER TABLE `fuga` ADD PRIMARY KEY (`id`);",
+		},
+		// change primary key
+		{
+			Before: "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL AUTO_INCREMENT, `fid` INTEGER NOT NULL, PRIMARY KEY (`id`) );",
+			After:  "CREATE TABLE `fuga` ( `id` INTEGER NOT NULL AUTO_INCREMENT, `fid` INTEGER NOT NULL, PRIMARY KEY (`id`,`fid`) );",
+			Expect: "ALTER TABLE `fuga` DROP PRIMARY KEY, ADD PRIMARY KEY (`id`, `fid`);",
 		},
 		// drop unique key
 		{
