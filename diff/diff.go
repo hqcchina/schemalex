@@ -274,9 +274,12 @@ func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 		}
 		afterStmt := stmt.(model.Table)
 
+		var found bool
 		var pbuf bytes.Buffer
 		alterCtx := newAlterCtx(beforeStmt, afterStmt)
 		for _, p := range procs {
+			pbuf.Reset()
+
 			n, err := p(alterCtx, &pbuf)
 			if err != nil {
 				return 0, errors.Wrap(err, `failed to generate alter table`)
@@ -285,7 +288,23 @@ func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 			if buf.Len() > 0 && n > 0 {
 				buf.WriteByte('\n')
 			}
-			pbuf.WriteTo(&buf)
+
+			if pbuf.Len() > 0 {
+				if !found {
+					found = true
+
+					buf.WriteString("ALTER TABLE `")
+					buf.WriteString(alterCtx.from.Name())
+					buf.WriteByte('`')
+					buf.WriteByte('\n')
+				}
+
+				pbuf.WriteTo(&buf)
+			}
+		}
+
+		if found {
+			buf.WriteByte(';')
 		}
 	}
 
@@ -298,18 +317,19 @@ func dropTableColumns(ctx *alterCtx, dst io.Writer) (int64, error) {
 	var buf bytes.Buffer
 	for _, columnName := range columnNames.ToSlice() {
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` DROP COLUMN `")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    DROP COLUMN `")
 		col, ok := ctx.from.LookupColumn(columnName.(string))
 		if !ok {
 			return 0, errors.Errorf(`failed to lookup column %s`, columnName)
 		}
 
 		buf.WriteString(col.Name())
-		buf.WriteString("`;")
+
+		buf.WriteByte('`')
 	}
 
 	return buf.WriteTo(dst)
@@ -397,11 +417,11 @@ func writeAddColumn(ctx *alterCtx, buf *bytes.Buffer, columnNames ...string) err
 
 		beforeCol, hasBeforeCol := ctx.to.LookupColumnBefore(stmt.ID())
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` ADD COLUMN ")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    ADD COLUMN ")
 		if err := format.SQL(buf, stmt); err != nil {
 			return err
 		}
@@ -412,8 +432,6 @@ func writeAddColumn(ctx *alterCtx, buf *bytes.Buffer, columnNames ...string) err
 		} else {
 			buf.WriteString(" FIRST")
 		}
-
-		buf.WriteByte(';')
 	}
 	return nil
 }
@@ -469,17 +487,16 @@ func alterTableColumns(ctx *alterCtx, dst io.Writer) (int64, error) {
 		}
 
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` CHANGE COLUMN `")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    CHANGE COLUMN `")
 		buf.WriteString(afterColumnStmt.Name())
 		buf.WriteString("` ")
 		if err := format.SQL(&buf, afterColumnStmt); err != nil {
 			return 0, err
 		}
-		buf.WriteByte(';')
 	}
 
 	return buf.WriteTo(dst)
@@ -510,33 +527,32 @@ func dropTableIndexes(ctx *alterCtx, dst io.Writer) (int64, error) {
 		}
 
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` DROP FOREIGN KEY `")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    DROP FOREIGN KEY `")
 		if indexStmt.HasSymbol() {
 			buf.WriteString(indexStmt.Symbol())
 		} else {
 			buf.WriteString(indexStmt.Name())
 		}
-		buf.WriteString("`;")
+		buf.WriteByte('`')
 	}
 	// drop index after drop CONSTRAINT
 	for _, indexStmt := range lazy {
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` DROP INDEX `")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    DROP INDEX `")
 		if !indexStmt.HasName() {
 			buf.WriteString(indexStmt.Symbol())
 		} else {
 			buf.WriteString(indexStmt.Name())
 		}
-
-		buf.WriteString("`;")
+		buf.WriteByte('`')
 	}
 
 	return buf.WriteTo(dst)
@@ -564,28 +580,26 @@ func addTableIndexes(ctx *alterCtx, dst io.Writer) (int64, error) {
 		}
 
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` ADD ")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    ADD ")
 		if err := format.SQL(&buf, indexStmt); err != nil {
 			return 0, err
 		}
-		buf.WriteByte(';')
 	}
 
 	for _, indexStmt := range lazy {
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` ADD ")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    ADD ")
 		if err := format.SQL(&buf, indexStmt); err != nil {
 			return 0, err
 		}
-		buf.WriteByte(';')
 	}
 
 	return buf.WriteTo(dst)
@@ -617,21 +631,20 @@ func alterTablePrimary(ctx *alterCtx, dst io.Writer) (int64, error) {
 
 		if indexStmt.IsPrimaryKey() {
 			if buf.Len() > 0 {
-				buf.WriteByte('\n')
+				buf.WriteString(",\n")
 			}
-			buf.WriteString("ALTER TABLE `")
-			buf.WriteString(ctx.from.Name())
+			// buf.WriteString("ALTER TABLE `")
+			// buf.WriteString(ctx.from.Name())
 			if found {
-				buf.WriteString("` DROP PRIMARY KEY, ADD ")
+				buf.WriteString("   DROP PRIMARY KEY, ADD ")
 				found = false
 			} else {
-				buf.WriteString("` ADD ")
+				buf.WriteString("   ADD ")
 			}
 
 			if err := format.SQL(&buf, indexStmt); err != nil {
 				return 0, err
 			}
-			buf.WriteByte(';')
 
 			break
 		}
@@ -639,11 +652,11 @@ func alterTablePrimary(ctx *alterCtx, dst io.Writer) (int64, error) {
 
 	if found {
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` DROP PRIMARY KEY;")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("   DROP PRIMARY KEY")
 	}
 
 	return buf.WriteTo(dst)
@@ -660,15 +673,14 @@ func alterTableOptions(ctx *alterCtx, dst io.Writer) (int64, error) {
 		}
 
 		if buf.Len() > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString(",\n")
 		}
-		buf.WriteString("ALTER TABLE `")
-		buf.WriteString(ctx.from.Name())
-		buf.WriteString("` ")
+		// buf.WriteString("ALTER TABLE `")
+		// buf.WriteString(ctx.from.Name())
+		buf.WriteString("    ")
 		if err := format.SQL(&buf, afterOptStmt); err != nil {
 			return 0, err
 		}
-		buf.WriteByte(';')
 	}
 
 	return buf.WriteTo(dst)
