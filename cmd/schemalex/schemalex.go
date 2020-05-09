@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/schemalex/schemalex"
@@ -78,6 +79,13 @@ Examples:
 
 	var dst io.Writer = os.Stdout
 	if len(outfile) > 0 {
+		basedir := filepath.Dir(outfile)
+		if len(basedir) > 0 && basedir != "." {
+			if _, err := os.Stat(basedir); os.IsNotExist(err) {
+				os.Mkdir(basedir, os.ModePerm)
+			}
+		}
+
 		f, err := os.OpenFile(outfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			return errors.Wrapf(err, `failed to open file %s for writing`, outfile)
