@@ -274,37 +274,19 @@ func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 		}
 		afterStmt := stmt.(model.Table)
 
-		var found bool
 		var pbuf bytes.Buffer
 		alterCtx := newAlterCtx(beforeStmt, afterStmt)
 		for _, p := range procs {
-			pbuf.Reset()
-
-			n, err := p(alterCtx, &pbuf)
+			_, err := p(alterCtx, &pbuf)
 			if err != nil {
 				return 0, errors.Wrap(err, `failed to generate alter table`)
 			}
-
-			if buf.Len() > 0 && n > 0 {
-				buf.WriteByte('\n')
-			}
-
-			if pbuf.Len() > 0 {
-				if !found {
-					found = true
-
-					buf.WriteString("ALTER TABLE `")
-					buf.WriteString(alterCtx.from.Name())
-					buf.WriteByte('`')
-					buf.WriteByte('\n')
-				}
-
-				pbuf.WriteTo(&buf)
-			}
 		}
 
-		if found {
-			buf.WriteByte(';')
+		if pbuf.Len() > 0 {
+			buf.WriteString("ALTER TABLE `" + alterCtx.from.Name() + "`\n")
+			pbuf.WriteString(";\n\n")
+			pbuf.WriteTo(&buf)
 		}
 	}
 
