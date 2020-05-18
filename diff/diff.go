@@ -276,10 +276,14 @@ func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 
 		var pbuf bytes.Buffer
 		alterCtx := newAlterCtx(beforeStmt, afterStmt)
-		for _, p := range procs {
-			_, err := p(alterCtx, &pbuf)
+		for j, p := range procs {
+			n, err := p(alterCtx, &pbuf)
 			if err != nil {
 				return 0, errors.Wrap(err, `failed to generate alter table`)
+			}
+
+			if n > 0 && pbuf.Len() > 0 && j != (len(procs)-1) {
+				pbuf.WriteString(",\n")
 			}
 		}
 
