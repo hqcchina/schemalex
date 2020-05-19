@@ -258,6 +258,8 @@ func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 
 	ids := ctx.toSet.Intersect(ctx.fromSet)
 	var buf bytes.Buffer
+	var buf1 bytes.Buffer
+	var buf2 bytes.Buffer
 	for _, id := range ids.ToSlice() {
 		var stmt model.Stmt
 		var ok bool
@@ -274,23 +276,29 @@ func alterTables(ctx *diffCtx, dst io.Writer) (int64, error) {
 		}
 		afterStmt := stmt.(model.Table)
 
-		var pbuf bytes.Buffer
+		buf1.Reset()
 		alterCtx := newAlterCtx(beforeStmt, afterStmt)
-		for j, p := range procs {
-			n, err := p(alterCtx, &pbuf)
+		for _, p := range procs {
+			buf2.Reset()
+
+			n, err := p(alterCtx, &buf2)
 			if err != nil {
 				return 0, errors.Wrap(err, `failed to generate alter table`)
 			}
 
-			if n > 0 && pbuf.Len() > 0 && j != (len(procs)-1) {
-				pbuf.WriteString(",\n")
+			if n > 0 {
+				if buf1.Len() > 0 {
+					buf1.WriteString(",\n")
+				}
+
+				buf2.WriteTo(&buf1)
 			}
 		}
 
-		if pbuf.Len() > 0 {
+		if buf1.Len() > 0 {
 			buf.WriteString("ALTER TABLE `" + alterCtx.from.Name() + "`\n")
-			pbuf.WriteString(";\n\n")
-			pbuf.WriteTo(&buf)
+			buf1.WriteString(";\n")
+			buf1.WriteTo(&buf)
 		}
 	}
 
@@ -305,8 +313,7 @@ func dropTableColumns(ctx *alterCtx, dst io.Writer) (int64, error) {
 		if buf.Len() > 0 {
 			buf.WriteString(",\n")
 		}
-		// buf.WriteString("ALTER TABLE `")
-		// buf.WriteString(ctx.from.Name())
+
 		buf.WriteString("    DROP COLUMN `")
 		col, ok := ctx.from.LookupColumn(columnName.(string))
 		if !ok {
@@ -475,8 +482,7 @@ func alterTableColumns(ctx *alterCtx, dst io.Writer) (int64, error) {
 		if buf.Len() > 0 {
 			buf.WriteString(",\n")
 		}
-		// buf.WriteString("ALTER TABLE `")
-		// buf.WriteString(ctx.from.Name())
+
 		buf.WriteString("    CHANGE COLUMN `")
 		buf.WriteString(afterColumnStmt.Name())
 		buf.WriteString("` ")
